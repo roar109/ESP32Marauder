@@ -1005,6 +1005,9 @@ class WiFiScan
     uint32_t eapol_frames = 0;
     uint32_t complete_eapol = 0;
     uint32_t flock_devices = 0;
+    static const uint16_t MESHTASTIC_WARDRIVE_MAX = 256;
+    uint8_t meshtastic_wardrive_macs[MESHTASTIC_WARDRIVE_MAX][6];
+    uint16_t meshtastic_wardrive_count = 0;
     int8_t min_rssi = 0;
     int8_t max_rssi = -128;
 

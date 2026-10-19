@@ -2803,7 +2803,7 @@ void WiFiScan::StartScan(uint8_t scan_mode, uint16_t color) {
     this->geofence_paused = false;
     this->active_geofence_name = "";
     #ifdef HAS_BT
-      this->clearList(CLEAR_MESH);
+      this->meshtastic_wardrive_count = 0;
       RunBluetoothScan(scan_mode, color);
     #endif
     RunBeaconScan(scan_mode, color);
@@ -6748,8 +6748,8 @@ void WiFiScan::displayWardriveStats() {
         display_obj.tft.setTextSize(2);
         display_obj.tft.setTextColor(TFT_RED, TFT_BLACK);
         display_obj.tft.println("Flock: " + (String)this->flock_devices);
-        display_obj.tft.setTextColor(TFT_VIOLET, TFT_BLACK);
-        display_obj.tft.println("MT: " + (String)meshtastic_nodes->size() + "\n");
+        display_obj.tft.setTextColor(TFT_GREEN, TFT_BLACK);
+        display_obj.tft.println("MT: " + (String)this->meshtastic_wardrive_count + "\n");
       #else
         display_obj.tft.setTextSize(2);
         display_obj.tft.setTextColor(TFT_GREEN, TFT_BLACK);
@@ -6759,8 +6759,8 @@ void WiFiScan::displayWardriveStats() {
         display_obj.tft.setTextSize(1);
         display_obj.tft.setTextColor(TFT_RED, TFT_BLACK);
         display_obj.tft.print("Flock:" + (String)this->flock_devices + " ");
-        display_obj.tft.setTextColor(TFT_VIOLET, TFT_BLACK);
-        display_obj.tft.println("MT:" + (String)meshtastic_nodes->size() + "\n");
+        display_obj.tft.setTextColor(TFT_GREEN, TFT_BLACK);
+        display_obj.tft.println("MT:" + (String)this->meshtastic_wardrive_count + "\n");
       #endif
       
 
@@ -7344,7 +7344,7 @@ void WiFiScan::updateMeshtasticNode(const String& mac_in, const String& name, in
     bool hex_suffix = true;
     for (int i = name_len - 4; i < name_len; i++) {
       char c = name.charAt(i);
-      if (!(((c >= '0') && (c <= '9')) || ((c >= 'a') && (c <= 'f')))) {
+      if (!(((c >= '0') && (c <= '9')) || ((c >= 'a') && (c <= 'f')) || ((c >= 'A') && (c <= 'F')))) {
         hex_suffix = false;
         break;
       }
@@ -7358,6 +7358,28 @@ void WiFiScan::updateMeshtasticNode(const String& mac_in, const String& name, in
 
   String mac = mac_in;
   mac.toUpperCase();
+
+  // Wardrive runs WiFi and BLE together and can sit below the heap guard's
+  // free-memory threshold, which silently rejected every list add. Count
+  // unique MACs in a fixed array instead so the HUD never depends on heap.
+  if (this->currentScanMode == WIFI_SCAN_WAR_DRIVE) {
+    if (mac.length() < 17)
+      return;
+    uint8_t mac_bytes[6];
+    for (int i = 0; i < 6; i++)
+      mac_bytes[i] = (uint8_t)strtol(mac.c_str() + (i * 3), NULL, 16);
+    for (uint16_t i = 0; i < this->meshtastic_wardrive_count; i++) {
+      if (memcmp(this->meshtastic_wardrive_macs[i], mac_bytes, 6) == 0)
+        return;
+    }
+    if (this->meshtastic_wardrive_count >= MESHTASTIC_WARDRIVE_MAX)
+      return;
+    memcpy(this->meshtastic_wardrive_macs[this->meshtastic_wardrive_count], mac_bytes, 6);
+    this->meshtastic_wardrive_count++;
+    Serial.println((String)rssi + " " + mac + (service_match ? " Meshtastic " : " Meshtastic? ") + name +
+                   " [wardrive MT:" + (String)this->meshtastic_wardrive_count + "]");
+    return;
+  }
 
   for (int i = 0; i < meshtastic_nodes->size(); i++) {
     if (mac == meshtastic_nodes->get(i).mac) {
@@ -7383,15 +7405,12 @@ void WiFiScan::updateMeshtasticNode(const String& mac_in, const String& name, in
   node.last_seen = millis();
   node.confirmed = service_match;
 
-  if (!marauder::memoryGuardedAdd(meshtastic_nodes, node))
+  if (!marauder::memoryGuardedAdd(meshtastic_nodes, node)) {
+    Serial.println(F("Meshtastic node dropped: low memory"));
     return;
+  }
 
   Serial.println((String)rssi + " " + mac + (service_match ? " Meshtastic " : " Meshtastic? ") + name);
-
-  // Wardrive already logs every new BLE MAC itself; only the dedicated
-  // detector writes its own log lines.
-  if (this->currentScanMode != BT_SCAN_MESHTASTIC)
-    return;
 
   String log_name = name;
   log_name.replace(",", " ");
