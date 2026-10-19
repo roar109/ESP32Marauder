@@ -1358,6 +1358,9 @@ void CommandLine::runCommand(String input) {
           else if (bt_type == "meta") {
             this->startScanFromCLI(BT_SCAN_RAYBAN, TFT_ORANGE, "Meta sniff");
           }
+          else if (bt_type == "meshtastic") {
+            this->startScanFromCLI(BT_SCAN_MESHTASTIC, TFT_GREEN, "Meshtastic detect");
+          }
         }
         // General bluetooth sniff
         else {

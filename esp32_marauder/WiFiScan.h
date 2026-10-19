@@ -182,6 +182,7 @@
 #define BT_ATTACK_FINDMY_LIVE 86
 #define REMOTE_ID_SCAN_ALL 87
 #define REMOTE_ID_SCAN_TARGET 88
+#define BT_SCAN_MESHTASTIC 89
 
 #define WIFI_ATTACK_FUNNY_BEACON 99 
 
@@ -234,6 +235,7 @@
 #define CLEAR_MULTI 6
 #define CLEAR_SSID  7
 #define CLEAR_BLE   8
+#define CLEAR_MESH  9
 
 #define WIGLE_UPLOAD 0
 #define WDG_UPLOAD   1
@@ -296,6 +298,10 @@ static const NimBLEUUID FMNA_SOUND_CHARACTERISTIC_UUID(
 
 static const NimBLEUUID DULT_SERVICE_UUID(
     "15190001-12f4-c226-88ed-2ac5579f2a85"
+);
+
+static const NimBLEUUID MESHTASTIC_SERVICE_UUID(
+    "6ba1b218-15a8-461f-9fa8-5dcae273eafd"
 );
 
 static const NimBLEUUID DULT_SOUND_CHARACTERISTIC_UUID(
@@ -364,6 +370,15 @@ struct Flipper {
   String name;
   int8_t rssi = -128;
   uint32_t last_seen = 0;
+};
+
+struct MeshtasticNode {
+  String mac;
+  String name;
+  String hint;
+  int8_t rssi = -128;
+  uint32_t last_seen = 0;
+  bool confirmed = false;
 };
 
 struct BleDevice {
@@ -870,6 +885,7 @@ class WiFiScan
     void RunSAEScan(uint8_t scan_mode, uint16_t color);
     void RunPacketMonitor(uint8_t scan_mode, uint16_t color);
     void RunBluetoothScan(uint8_t scan_mode, uint16_t color);
+    void runMeshtasticDetector(uint32_t currentTime);
     void RunSourApple(uint8_t scan_mode, uint16_t color);
     void RunFindMyLive(uint8_t scan_mode, uint16_t color);
     void RunSwiftpairSpam(uint8_t scan_mode, uint16_t color);
@@ -1114,6 +1130,7 @@ class WiFiScan
     bool startWiFi(String ssid, String password, bool gui = true);
     bool isFlockCamera(const uint8_t* payload, size_t len, const String& name, String* serial_out);
     int seenBLEDevice(BleDevice ble_device);
+    void updateMeshtasticNode(const String& mac, const String& name, int rssi, bool service_match);
     bool retainBLEDevice(const BleDevice& ble_device);
     bool shouldRenderIBeaconEvent(uint32_t current_time);
     uint16_t rssiToColor(int8_t rssi);

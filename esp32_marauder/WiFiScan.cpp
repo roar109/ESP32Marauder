@@ -38,6 +38,7 @@ LinkedList<AccessPoint>* access_points;
 LinkedList<Station>* stations;
 LinkedList<AirTag>* airtags;
 LinkedList<Flipper>* flippers;
+LinkedList<MeshtasticNode>* meshtastic_nodes;
 LinkedList<IPAddress>* ipList;
 LinkedList<ProbeReqSsid>* probe_req_ssids;
 LinkedList<BleDevice>* ble_devices;
@@ -976,6 +977,10 @@ extern "C" {
           else if (wifi_scan_obj.currentScanMode == WIFI_SCAN_DETECT_FOLLOW) {
             int frame_check = wifi_scan_obj.update_mac_entry(mac_char, advertisedDevice->getRSSI(), true);
           }
+          else if (wifi_scan_obj.currentScanMode == BT_SCAN_MESHTASTIC) {
+            wifi_scan_obj.updateMeshtasticNode(mac, name, rssi,
+                advertisedDevice->isAdvertisingService(MESHTASTIC_SERVICE_UUID));
+          }
           else if (wifi_scan_obj.currentScanMode == BT_SCAN_RAYBAN) { // Filters from https://github.com/NullPxl
             bool match = false;
 
@@ -1641,6 +1646,10 @@ extern "C" {
 
             int frame_check = wifi_scan_obj.update_mac_entry(mac_char, rssi, true);
           }
+          else if (wifi_scan_obj.currentScanMode == BT_SCAN_MESHTASTIC) {
+            wifi_scan_obj.updateMeshtasticNode(mac, name, rssi,
+                advertisedDevice->isAdvertisingService(MESHTASTIC_SERVICE_UUID));
+          }
           else if (wifi_scan_obj.currentScanMode == BT_SCAN_RAYBAN) { // Filters from https://github.com/NullPxl
             bool match = false;
 
@@ -1924,6 +1933,7 @@ void WiFiScan::RunSetup() {
   stations = new LinkedList<Station>();
   airtags = new LinkedList<AirTag>();
   flippers = new LinkedList<Flipper>();
+  meshtastic_nodes = new LinkedList<MeshtasticNode>();
   ble_devices = new LinkedList<BleDevice>();
   ipList = new LinkedList<IPAddress>();
   probe_req_ssids = new LinkedList<ProbeReqSsid>;
@@ -2252,6 +2262,12 @@ int WiFiScan::clearList(uint8_t list_type) {
     num_cleared = flippers->size();
     while (flippers->size() > 0)
       flippers->remove(0);
+    return num_cleared;
+  }
+  else if (list_type == CLEAR_MESH) {
+    num_cleared = meshtastic_nodes->size();
+    while (meshtastic_nodes->size() > 0)
+      meshtastic_nodes->remove(0);
     return num_cleared;
   }
   else if (list_type == CLEAR_STA) {
@@ -2848,6 +2864,7 @@ void WiFiScan::StartScan(uint8_t scan_mode, uint16_t color) {
   else if ((scan_mode == BT_SCAN_ALL) ||
           (scan_mode == BT_SCAN_IBEACON) ||
           (scan_mode == BT_SCAN_FOX_HUNT) ||
+          (scan_mode == BT_SCAN_MESHTASTIC) ||
           (scan_mode == BT_SCAN_RAYBAN) ||
           (scan_mode == BT_SCAN_AIRTAG) ||
           (scan_mode == BT_SCAN_AIRTAG_MON) ||
@@ -3244,6 +3261,7 @@ void WiFiScan::StopScan(uint8_t scan_mode) {
   if ((currentScanMode == BT_SCAN_ALL) ||
   (currentScanMode == BT_SCAN_IBEACON) ||
   (currentScanMode == BT_SCAN_FOX_HUNT) ||
+  (currentScanMode == BT_SCAN_MESHTASTIC) ||
   (currentScanMode == BT_SCAN_RAYBAN) ||
   (currentScanMode == BT_SCAN_AIRTAG) ||
   (currentScanMode == BT_SCAN_AIRTAG_MON) ||
@@ -7138,6 +7156,7 @@ void WiFiScan::RunBluetoothScan(uint8_t scan_mode, uint16_t color) {
         (scan_mode == BT_SCAN_SIMPLE) ||
         (scan_mode == BT_SCAN_SIMPLE_TWO) ||
         (scan_mode == BT_SCAN_ANALYZER) ||
+        (scan_mode == BT_SCAN_MESHTASTIC) ||
         (scan_mode == BT_SCAN_RAYBAN))
       NimBLEDevice::setScanDuplicateCacheSize(0);
     else {
@@ -7151,6 +7170,7 @@ void WiFiScan::RunBluetoothScan(uint8_t scan_mode, uint16_t color) {
     if ((scan_mode == BT_SCAN_ALL) ||
         (scan_mode == BT_SCAN_IBEACON) ||
         (scan_mode == BT_SCAN_FOX_HUNT) ||
+        (scan_mode == BT_SCAN_MESHTASTIC) ||
         (scan_mode == BT_SCAN_RAYBAN) ||
         (scan_mode == BT_SCAN_AIRTAG) ||
         (scan_mode == BT_SCAN_AIRTAG_MON) ||
@@ -7184,6 +7204,8 @@ void WiFiScan::RunBluetoothScan(uint8_t scan_mode, uint16_t color) {
             display_obj.tft.drawCentreString("Simple Sniff 2", TFT_WIDTH / 2, 16, 2);
           else if (scan_mode == BT_SCAN_RAYBAN)
             display_obj.tft.drawCentreString("Meta Detect",TFT_WIDTH / 2, 16, 2);
+          else if (scan_mode == BT_SCAN_MESHTASTIC)
+            display_obj.tft.drawCentreString("Meshtastic Detect", TFT_WIDTH / 2, 16, 2);
           #ifdef HAS_ILI9341
             if (scan_mode != BT_SCAN_FLOCK)
               display_obj.touchToExit();
@@ -7207,6 +7229,7 @@ void WiFiScan::RunBluetoothScan(uint8_t scan_mode, uint16_t color) {
         #endif
       }
       else if ((scan_mode == BT_SCAN_FLIPPER) ||
+                (scan_mode == BT_SCAN_MESHTASTIC) ||
                 (scan_mode == BT_SCAN_RAYBAN) ||
                 (scan_mode == BT_SCAN_FLOCK) ||
                 (scan_mode == BT_SCAN_SIMPLE) ||
@@ -7215,6 +7238,11 @@ void WiFiScan::RunBluetoothScan(uint8_t scan_mode, uint16_t color) {
                 (scan_mode == BT_SCAN_SIMPLE_TWO)) {
         if (scan_mode == BT_SCAN_FLIPPER)
           this->clearList(CLEAR_FLIP);
+        if (scan_mode == BT_SCAN_MESHTASTIC) {
+          this->clearList(CLEAR_MESH);
+          this->startLog("meshtastic");
+          buffer_obj.append(this->header_line);
+        }
         if ((scan_mode == BT_SCAN_AIRTAG) || (scan_mode == BT_SCAN_AIRTAG_MON))
           this->clearList(CLEAR_AT);
 
@@ -7277,6 +7305,7 @@ void WiFiScan::RunBluetoothScan(uint8_t scan_mode, uint16_t color) {
     pBLEScan->setWindow(30);  // less or equal setInterval value
     pBLEScan->setMaxResults(0);
     if ((scan_mode == BT_SCAN_RAYBAN) ||
+        (scan_mode == BT_SCAN_MESHTASTIC) ||
         (scan_mode == WIFI_SCAN_WAR_DRIVE) ||
         (scan_mode == BT_SCAN_ANALYZER) ||
         (scan_mode == BT_SCAN_FLOCK) ||
@@ -7292,6 +7321,146 @@ void WiFiScan::RunBluetoothScan(uint8_t scan_mode, uint16_t color) {
     this->setLEDMode(MODE_SNIFF);
 
     initTime = millis();
+  #endif
+}
+
+// Meshtastic advertises its service UUID in the advertising packet and its
+// name ("Meshtastic_xxxx") in the scan response, so an active scan sees both.
+void WiFiScan::updateMeshtasticNode(const String& mac_in, const String& name, int rssi, bool service_match) {
+  String hint = "";
+  const int name_len = name.length();
+  if ((name_len >= 5) && (name.charAt(name_len - 5) == '_')) {
+    bool hex_suffix = true;
+    for (int i = name_len - 4; i < name_len; i++) {
+      char c = name.charAt(i);
+      if (!(((c >= '0') && (c <= '9')) || ((c >= 'a') && (c <= 'f')))) {
+        hex_suffix = false;
+        break;
+      }
+    }
+    if (hex_suffix)
+      hint = name.substring(name_len - 4);
+  }
+
+  if ((!service_match) && (hint == ""))
+    return;
+
+  String mac = mac_in;
+  mac.toUpperCase();
+
+  for (int i = 0; i < meshtastic_nodes->size(); i++) {
+    if (mac == meshtastic_nodes->get(i).mac) {
+      MeshtasticNode node = meshtastic_nodes->get(i);
+      node.rssi = rssi;
+      node.last_seen = millis();
+      if (name_len > 0) {
+        node.name = name;
+        node.hint = hint;
+      }
+      if (service_match)
+        node.confirmed = true;
+      meshtastic_nodes->set(i, node);
+      return;
+    }
+  }
+
+  MeshtasticNode node;
+  node.mac = mac;
+  node.name = name;
+  node.hint = hint;
+  node.rssi = rssi;
+  node.last_seen = millis();
+  node.confirmed = service_match;
+
+  if (!marauder::memoryGuardedAdd(meshtastic_nodes, node))
+    return;
+
+  Serial.println((String)rssi + " " + mac + (service_match ? " Meshtastic " : " Meshtastic? ") + name);
+
+  String log_name = name;
+  log_name.replace(",", " ");
+  String log_line = mac + "," + log_name + ",[BLE],";
+  #ifdef HAS_GPS
+    if (gps_obj.getGpsModuleStatus() && gps_obj.getFixStatus())
+      log_line += gps_obj.getDatetime() + ",0," + (String)rssi + "," + gps_obj.getLat() + "," + gps_obj.getLon() + "," + gps_obj.getAlt() + "," + gps_obj.getAccuracy();
+    else
+  #endif
+      log_line += ",0," + (String)rssi + ",0,0,0,0";
+  log_line += ",BLE\n";
+  buffer_obj.append(log_line);
+}
+
+void WiFiScan::runMeshtasticDetector(uint32_t currentTime) {
+  #ifdef HAS_BT
+    #ifdef HAS_SCREEN
+      if (currentTime - this->last_ui_update < 500)
+        return;
+      this->last_ui_update = millis();
+
+      const int16_t list_y = (STATUS_BAR_WIDTH * 2) + 1 + EXT_BUTTON_WIDTH;
+      const uint8_t line_height = 8;
+      const uint8_t cols = TFT_WIDTH / CHAR_WIDTH;
+      const int max_nodes = ((TFT_HEIGHT - list_y) / line_height - 1) / 2;
+      if (max_nodes < 1)
+        return;
+
+      // Hold callbacks off the list while it is sorted and copied.
+      this->bt_pending_clear = true;
+      const uint32_t callback_wait_started = millis();
+      while (bt_cb_busy && millis() - callback_wait_started < 500)
+        delay(1);
+      bt_cb_busy = false;
+
+      const int total = meshtastic_nodes->size();
+      int confirmed = 0;
+      std::vector<std::pair<int, int>> order; // {-rssi, list index}
+      order.reserve(total);
+      for (int i = 0; i < total; i++) {
+        order.push_back({-(int)meshtastic_nodes->get(i).rssi, i});
+        if (meshtastic_nodes->get(i).confirmed)
+          confirmed++;
+      }
+      std::sort(order.begin(), order.end());
+
+      const int shown = (total < max_nodes) ? total : max_nodes;
+      std::vector<MeshtasticNode> rows;
+      rows.reserve(shown);
+      for (int i = 0; i < shown; i++)
+        rows.push_back(meshtastic_nodes->get(order[i].second));
+
+      this->bt_pending_clear = false;
+
+      auto printRow = [&](String text, uint16_t color) {
+        if (text.length() > cols)
+          text = text.substring(0, cols);
+        while (text.length() < cols)
+          text.concat(" ");
+        display_obj.tft.setTextColor(color, TFT_BLACK);
+        display_obj.tft.println(text);
+      };
+
+      display_obj.tft.setFreeFont(NULL);
+      display_obj.tft.setTextWrap(false);
+      display_obj.tft.setTextSize(1);
+      display_obj.tft.setCursor(0, list_y);
+
+      printRow("Nodes:" + (String)total + " *:" + (String)confirmed + " ?:" + (String)(total - confirmed), TFT_WHITE);
+
+      for (int i = 0; i < max_nodes; i++) {
+        if (i < shown) {
+          const MeshtasticNode& node = rows[i];
+          printRow((String)node.rssi + (node.confirmed ? " * #" : " ? #") +
+                   (node.hint.length() ? node.hint : String("----")) + " " +
+                   (node.name.length() ? node.name : String("(unknown)")),
+                   node.confirmed ? TFT_GREEN : TFT_YELLOW);
+          printRow("  " + node.mac, TFT_CYAN);
+        }
+        else {
+          printRow("", TFT_BLACK);
+          printRow("", TFT_BLACK);
+        }
+      }
+    #endif
   #endif
 }
 
@@ -12515,6 +12684,9 @@ void WiFiScan::main(uint32_t currentTime)
   }
   else if (currentScanMode == BT_SCAN_FOX_HUNT) {
     this->runFoxHunt(currentTime);
+  }
+  else if (currentScanMode == BT_SCAN_MESHTASTIC) {
+    this->runMeshtasticDetector(currentTime);
   }
   else if (currentScanMode == WIFI_SCAN_DETECT_FOLLOW) {
     if (currentTime - initTime >= this->channel_hop_delay * HOP_DELAY) {
