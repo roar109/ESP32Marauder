@@ -2820,6 +2820,10 @@ void WiFiScan::StartScan(uint8_t scan_mode, uint16_t color) {
   else if (scan_mode == WIFI_SCAN_AP)
     RunBeaconScan(scan_mode, color);
   else if (scan_mode == WIFI_SCAN_WAR_DRIVE) {
+    this->logWardriveHeap("WARDRIVE START", "begin");
+    this->wardrive_ble_logged = false;
+    this->wardrive_channel_index = 0;
+    this->ble_scanning = false;
     this->reloadGeofences();
     this->geofence_paused = false;
     this->active_geofence_name = "";
@@ -2833,6 +2837,7 @@ void WiFiScan::StartScan(uint8_t scan_mode, uint16_t color) {
     // Drawing a status screen before that left its text size active and
     // corrupted the wardrive status-bar typography.
     this->updateGeofenceState(true);
+    this->logWardriveHeap("WARDRIVE START", "ready");
   }
   else if (scan_mode == WIFI_SCAN_SIG_STREN)
     RunRawScan(scan_mode, color);    
@@ -3150,8 +3155,17 @@ bool WiFiScan::shutdownBLE() {
 
       delay(100);
 
-
-      NimBLEDevice::deinit();
+      #ifdef HAS_NIMBLE_2
+        bool deinit_ok = NimBLEDevice::deinit();
+        for (uint8_t retry = 0; (!deinit_ok) && (retry < 3); retry++) {
+          delay(100);
+          deinit_ok = NimBLEDevice::deinit();
+        }
+        if (this->currentScanMode == WIFI_SCAN_WAR_DRIVE)
+          Serial.printf("[WARDRIVE STOP] NimBLE deinit ok=%d\n", (int)deinit_ok);
+      #else
+        NimBLEDevice::deinit();
+      #endif
 
       this->_analyzer_value = 0;
       this->bt_frames = 0;
@@ -3169,8 +3183,21 @@ bool WiFiScan::shutdownBLE() {
   return true;
 }
 
+void WiFiScan::logWardriveHeap(const char* tag, const char* phase) {
+  Serial.printf("[%s] %s freeHeap=%u largestBlock=%u minFreeHeap=%u\n", tag, phase,
+                (unsigned)ESP.getFreeHeap(),
+                (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_8BIT),
+                (unsigned)ESP.getMinFreeHeap());
+}
+
 // Function to stop all wifi scans
 void WiFiScan::StopScan(uint8_t scan_mode) {
+  const bool was_wardrive = (currentScanMode == WIFI_SCAN_WAR_DRIVE);
+  if (was_wardrive) {
+    this->logWardriveHeap("WARDRIVE STOP", "begin");
+    // Release any scan result the async WiFi scan is still holding.
+    WiFi.scanDelete();
+  }
   #ifdef HAS_SD
     if ((currentScanMode == REMOTE_ID_SCAN_ALL) ||
         (currentScanMode == REMOTE_ID_SCAN_TARGET))
@@ -3351,6 +3378,9 @@ void WiFiScan::StopScan(uint8_t scan_mode) {
   #ifdef HAS_GPS
     gps_obj.disable_queue();
   #endif
+
+  if (was_wardrive)
+    this->logWardriveHeap("WARDRIVE STOP", "end");
 }
 
 void WiFiScan::getMAC(bool get_sta, uint8_t* mac) {
@@ -6444,10 +6474,17 @@ void WiFiScan::executeWarDrive() {
             pBLEScan->clearResults();
 
             #ifdef HAS_NIMBLE_2
-              pBLEScan->start(500, false, false);
+              const bool ble_started = pBLEScan->start(500, false, false);
             #else
-              pBLEScan->start(1, scanCompleteCB, false);
+              const bool ble_started = pBLEScan->start(1, scanCompleteCB, false);
             #endif
+
+            if (!this->wardrive_ble_logged) {
+              this->wardrive_ble_logged = true;
+              Serial.printf("[WARDRIVE START] BLE scan started=%d\n", (int)ble_started);
+              if (!ble_started)
+                this->logWardriveHeap("WARDRIVE START", "ble-start-failed");
+            }
 
             this->ble_scanning = true;
             this->bt_pending_clear = false;
@@ -7184,6 +7221,10 @@ void WiFiScan::RunSwiftpairSpam(uint8_t scan_mode, uint16_t color) {
 // Function to start running any BLE scan
 void WiFiScan::RunBluetoothScan(uint8_t scan_mode, uint16_t color) {
   #ifdef HAS_BT
+    // One shared instance: the callbacks are stateless and NimBLE never frees
+    // them, so allocating a new one on every start leaked heap each run.
+    static bluetoothScanAllCallback ble_scan_all_callbacks;
+
     #ifdef HAS_SCREEN
       display_obj.print_delay_1 = 50;
       display_obj.print_delay_2 = 20;
@@ -7205,8 +7246,16 @@ void WiFiScan::RunBluetoothScan(uint8_t scan_mode, uint16_t color) {
     }
 
 
+    #ifdef HAS_NIMBLE_2
+      if (scan_mode == WIFI_SCAN_WAR_DRIVE)
+        Serial.printf("[WARDRIVE START] NimBLE already initialized=%d\n", (int)NimBLEDevice::isInitialized());
+    #endif
     NimBLEDevice::init("");
     pBLEScan = NimBLEDevice::getScan(); //create new scan
+    #ifdef HAS_NIMBLE_2
+      if (scan_mode == WIFI_SCAN_WAR_DRIVE)
+        Serial.printf("[WARDRIVE START] NimBLE initialized=%d scanObj=%d\n", (int)NimBLEDevice::isInitialized(), (int)(pBLEScan != nullptr));
+    #endif
     if ((scan_mode == BT_SCAN_ALL) ||
         (scan_mode == BT_SCAN_IBEACON) ||
         (scan_mode == BT_SCAN_FOX_HUNT) ||
@@ -7259,16 +7308,16 @@ void WiFiScan::RunBluetoothScan(uint8_t scan_mode, uint16_t color) {
       if ((scan_mode == BT_SCAN_ALL) || (scan_mode == BT_SCAN_IBEACON)) {
         this->clearList(CLEAR_BLE);
         #ifndef HAS_NIMBLE_2
-          pBLEScan->setAdvertisedDeviceCallbacks(new bluetoothScanAllCallback(), true);
+          pBLEScan->setAdvertisedDeviceCallbacks(&ble_scan_all_callbacks, true);
         #else
-          pBLEScan->setScanCallbacks(new bluetoothScanAllCallback(), true);
+          pBLEScan->setScanCallbacks(&ble_scan_all_callbacks, true);
         #endif
       }
       else if (scan_mode == BT_SCAN_FOX_HUNT) {
         #ifndef HAS_NIMBLE_2
-          pBLEScan->setAdvertisedDeviceCallbacks(new bluetoothScanAllCallback(), true);
+          pBLEScan->setAdvertisedDeviceCallbacks(&ble_scan_all_callbacks, true);
         #else
-          pBLEScan->setScanCallbacks(new bluetoothScanAllCallback(), true);
+          pBLEScan->setScanCallbacks(&ble_scan_all_callbacks, true);
         #endif
       }
       else if ((scan_mode == BT_SCAN_FLIPPER) ||
@@ -7296,9 +7345,9 @@ void WiFiScan::RunBluetoothScan(uint8_t scan_mode, uint16_t color) {
           this->clearList(CLEAR_AT);
 
         #ifndef HAS_NIMBLE_2
-          pBLEScan->setAdvertisedDeviceCallbacks(new bluetoothScanAllCallback(), true);
+          pBLEScan->setAdvertisedDeviceCallbacks(&ble_scan_all_callbacks, true);
         #else
-          pBLEScan->setScanCallbacks(new bluetoothScanAllCallback(), true);
+          pBLEScan->setScanCallbacks(&ble_scan_all_callbacks, true);
         #endif
       }
     }
@@ -7316,9 +7365,9 @@ void WiFiScan::RunBluetoothScan(uint8_t scan_mode, uint16_t color) {
 		display_obj.tft.setFreeFont(NULL);
       #endif
       #ifndef HAS_NIMBLE_2
-        pBLEScan->setAdvertisedDeviceCallbacks(new bluetoothScanAllCallback(), false);
+        pBLEScan->setAdvertisedDeviceCallbacks(&ble_scan_all_callbacks, false);
       #else
-        pBLEScan->setScanCallbacks(new bluetoothScanAllCallback(), false);
+        pBLEScan->setScanCallbacks(&ble_scan_all_callbacks, false);
       #endif
     }
     else if (scan_mode == BT_SCAN_ANALYZER) {
@@ -7335,18 +7384,18 @@ void WiFiScan::RunBluetoothScan(uint8_t scan_mode, uint16_t color) {
         display_obj.tft.setTextColor(TFT_CYAN, TFT_BLACK);
       #endif
       #ifndef HAS_NIMBLE_2
-        pBLEScan->setAdvertisedDeviceCallbacks(new bluetoothScanAllCallback(), false);
+        pBLEScan->setAdvertisedDeviceCallbacks(&ble_scan_all_callbacks, false);
       #else
-        pBLEScan->setScanCallbacks(new bluetoothScanAllCallback(), false);
+        pBLEScan->setScanCallbacks(&ble_scan_all_callbacks, false);
       #endif
 
     }
     else if ((scan_mode == WIFI_SCAN_WAR_DRIVE) ||
             (scan_mode == WIFI_SCAN_DETECT_FOLLOW)) {
       #ifndef HAS_NIMBLE_2
-        pBLEScan->setAdvertisedDeviceCallbacks(new bluetoothScanAllCallback(), true);
+        pBLEScan->setAdvertisedDeviceCallbacks(&ble_scan_all_callbacks, true);
       #else
-        pBLEScan->setScanCallbacks(new bluetoothScanAllCallback(), true);
+        pBLEScan->setScanCallbacks(&ble_scan_all_callbacks, true);
       #endif
     }
     pBLEScan->setActiveScan(true); //active scan uses more power, but get results faster
