@@ -677,14 +677,14 @@ extern "C" {
             }
           }
           else if (wifi_scan_obj.currentScanMode == WIFI_SCAN_WAR_DRIVE) {
+            wifi_scan_obj.updateMeshtasticNode(mac, name, rssi,
+                advertisedDevice->isAdvertisingService(MESHTASTIC_SERVICE_UUID));
+
             #ifdef HAS_GPS
               if (gps_obj.getGpsModuleStatus()) {
                 bool do_save = false;
                 if (buf >= 0)
                 {      
-
-                  wifi_scan_obj.updateMeshtasticNode(mac, name, rssi,
-                      advertisedDevice->isAdvertisingService(MESHTASTIC_SERVICE_UUID));
 
                   if (wifi_scan_obj.seen_mac(mac_char)) {
                     wifi_scan_obj.bt_cb_busy = false;
@@ -1473,14 +1473,14 @@ extern "C" {
             }
           }
           else if (wifi_scan_obj.currentScanMode == WIFI_SCAN_WAR_DRIVE) {
+            wifi_scan_obj.updateMeshtasticNode(mac, name, rssi,
+                advertisedDevice->isAdvertisingService(MESHTASTIC_SERVICE_UUID));
+
             #ifdef HAS_GPS
               if (gps_obj.getGpsModuleStatus()) {
                 bool do_save = false;
                 if (buf >= 0)
                 {                
-
-                  wifi_scan_obj.updateMeshtasticNode(mac, name, rssi,
-                      advertisedDevice->isAdvertisingService(MESHTASTIC_SERVICE_UUID));
 
                   if (wifi_scan_obj.seen_mac(mac_char)) {
                     wifi_scan_obj.bt_cb_busy = false;
@@ -6748,7 +6748,7 @@ void WiFiScan::displayWardriveStats() {
         display_obj.tft.setTextSize(2);
         display_obj.tft.setTextColor(TFT_RED, TFT_BLACK);
         display_obj.tft.println("Flock: " + (String)this->flock_devices);
-        display_obj.tft.setTextColor(TFT_GREEN, TFT_BLACK);
+        display_obj.tft.setTextColor(TFT_PURPLE, TFT_BLACK);
         display_obj.tft.println("MT: " + (String)meshtastic_nodes->size() + "\n");
       #else
         display_obj.tft.setTextSize(2);
@@ -6759,7 +6759,7 @@ void WiFiScan::displayWardriveStats() {
         display_obj.tft.setTextSize(1);
         display_obj.tft.setTextColor(TFT_RED, TFT_BLACK);
         display_obj.tft.print("Flock:" + (String)this->flock_devices + " ");
-        display_obj.tft.setTextColor(TFT_GREEN, TFT_BLACK);
+        display_obj.tft.setTextColor(TFT_PURPLE, TFT_BLACK);
         display_obj.tft.println("MT:" + (String)meshtastic_nodes->size() + "\n");
       #endif
       
