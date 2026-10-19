@@ -39,6 +39,7 @@ LinkedList<Station>* stations;
 LinkedList<AirTag>* airtags;
 LinkedList<Flipper>* flippers;
 LinkedList<MeshtasticNode>* meshtastic_nodes;
+LinkedList<MeshcoreNode>* meshcore_nodes;
 LinkedList<IPAddress>* ipList;
 LinkedList<ProbeReqSsid>* probe_req_ssids;
 LinkedList<BleDevice>* ble_devices;
@@ -679,6 +680,8 @@ extern "C" {
           else if (wifi_scan_obj.currentScanMode == WIFI_SCAN_WAR_DRIVE) {
             wifi_scan_obj.updateMeshtasticNode(mac, name, rssi,
                 advertisedDevice->isAdvertisingService(MESHTASTIC_SERVICE_UUID));
+            wifi_scan_obj.updateMeshcoreNode(mac, name, rssi,
+                advertisedDevice->isAdvertisingService(MESHCORE_NUS_SERVICE_UUID));
 
             #ifdef HAS_GPS
               if (gps_obj.getGpsModuleStatus()) {
@@ -983,6 +986,10 @@ extern "C" {
           else if (wifi_scan_obj.currentScanMode == BT_SCAN_MESHTASTIC) {
             wifi_scan_obj.updateMeshtasticNode(mac, name, rssi,
                 advertisedDevice->isAdvertisingService(MESHTASTIC_SERVICE_UUID));
+          }
+          else if (wifi_scan_obj.currentScanMode == BT_SCAN_MESHCORE) {
+            wifi_scan_obj.updateMeshcoreNode(mac, name, rssi,
+                advertisedDevice->isAdvertisingService(MESHCORE_NUS_SERVICE_UUID));
           }
           else if (wifi_scan_obj.currentScanMode == BT_SCAN_RAYBAN) { // Filters from https://github.com/NullPxl
             bool match = false;
@@ -1475,6 +1482,8 @@ extern "C" {
           else if (wifi_scan_obj.currentScanMode == WIFI_SCAN_WAR_DRIVE) {
             wifi_scan_obj.updateMeshtasticNode(mac, name, rssi,
                 advertisedDevice->isAdvertisingService(MESHTASTIC_SERVICE_UUID));
+            wifi_scan_obj.updateMeshcoreNode(mac, name, rssi,
+                advertisedDevice->isAdvertisingService(MESHCORE_NUS_SERVICE_UUID));
 
             #ifdef HAS_GPS
               if (gps_obj.getGpsModuleStatus()) {
@@ -1655,6 +1664,10 @@ extern "C" {
           else if (wifi_scan_obj.currentScanMode == BT_SCAN_MESHTASTIC) {
             wifi_scan_obj.updateMeshtasticNode(mac, name, rssi,
                 advertisedDevice->isAdvertisingService(MESHTASTIC_SERVICE_UUID));
+          }
+          else if (wifi_scan_obj.currentScanMode == BT_SCAN_MESHCORE) {
+            wifi_scan_obj.updateMeshcoreNode(mac, name, rssi,
+                advertisedDevice->isAdvertisingService(MESHCORE_NUS_SERVICE_UUID));
           }
           else if (wifi_scan_obj.currentScanMode == BT_SCAN_RAYBAN) { // Filters from https://github.com/NullPxl
             bool match = false;
@@ -1940,6 +1953,7 @@ void WiFiScan::RunSetup() {
   airtags = new LinkedList<AirTag>();
   flippers = new LinkedList<Flipper>();
   meshtastic_nodes = new LinkedList<MeshtasticNode>();
+  meshcore_nodes = new LinkedList<MeshcoreNode>();
   ble_devices = new LinkedList<BleDevice>();
   ipList = new LinkedList<IPAddress>();
   probe_req_ssids = new LinkedList<ProbeReqSsid>;
@@ -2274,6 +2288,12 @@ int WiFiScan::clearList(uint8_t list_type) {
     num_cleared = meshtastic_nodes->size();
     while (meshtastic_nodes->size() > 0)
       meshtastic_nodes->remove(0);
+    return num_cleared;
+  }
+  else if (list_type == CLEAR_MESHCORE) {
+    num_cleared = meshcore_nodes->size();
+    while (meshcore_nodes->size() > 0)
+      meshcore_nodes->remove(0);
     return num_cleared;
   }
   else if (list_type == CLEAR_STA) {
@@ -2804,6 +2824,7 @@ void WiFiScan::StartScan(uint8_t scan_mode, uint16_t color) {
     this->active_geofence_name = "";
     #ifdef HAS_BT
       this->meshtastic_wardrive_count = 0;
+      this->meshcore_wardrive_count = 0;
       RunBluetoothScan(scan_mode, color);
     #endif
     RunBeaconScan(scan_mode, color);
@@ -2872,6 +2893,7 @@ void WiFiScan::StartScan(uint8_t scan_mode, uint16_t color) {
           (scan_mode == BT_SCAN_IBEACON) ||
           (scan_mode == BT_SCAN_FOX_HUNT) ||
           (scan_mode == BT_SCAN_MESHTASTIC) ||
+          (scan_mode == BT_SCAN_MESHCORE) ||
           (scan_mode == BT_SCAN_RAYBAN) ||
           (scan_mode == BT_SCAN_AIRTAG) ||
           (scan_mode == BT_SCAN_AIRTAG_MON) ||
@@ -3269,6 +3291,7 @@ void WiFiScan::StopScan(uint8_t scan_mode) {
   (currentScanMode == BT_SCAN_IBEACON) ||
   (currentScanMode == BT_SCAN_FOX_HUNT) ||
   (currentScanMode == BT_SCAN_MESHTASTIC) ||
+  (currentScanMode == BT_SCAN_MESHCORE) ||
   (currentScanMode == BT_SCAN_RAYBAN) ||
   (currentScanMode == BT_SCAN_AIRTAG) ||
   (currentScanMode == BT_SCAN_AIRTAG_MON) ||
@@ -6749,7 +6772,9 @@ void WiFiScan::displayWardriveStats() {
         display_obj.tft.setTextColor(TFT_RED, TFT_BLACK);
         display_obj.tft.println("Flock: " + (String)this->flock_devices);
         display_obj.tft.setTextColor(TFT_GREEN, TFT_BLACK);
-        display_obj.tft.println("MT: " + (String)this->meshtastic_wardrive_count + "\n");
+        display_obj.tft.print("MT: " + (String)this->meshtastic_wardrive_count + " ");
+        display_obj.tft.setTextColor(TFT_RED, TFT_BLACK);
+        display_obj.tft.println("MC: " + (String)this->meshcore_wardrive_count + "\n");
       #else
         display_obj.tft.setTextSize(2);
         display_obj.tft.setTextColor(TFT_GREEN, TFT_BLACK);
@@ -6760,7 +6785,9 @@ void WiFiScan::displayWardriveStats() {
         display_obj.tft.setTextColor(TFT_RED, TFT_BLACK);
         display_obj.tft.print("Flock:" + (String)this->flock_devices + " ");
         display_obj.tft.setTextColor(TFT_GREEN, TFT_BLACK);
-        display_obj.tft.println("MT:" + (String)this->meshtastic_wardrive_count + "\n");
+        display_obj.tft.print("MT:" + (String)this->meshtastic_wardrive_count + " ");
+        display_obj.tft.setTextColor(TFT_RED, TFT_BLACK);
+        display_obj.tft.println("MC:" + (String)this->meshcore_wardrive_count + "\n");
       #endif
       
 
@@ -7168,6 +7195,7 @@ void WiFiScan::RunBluetoothScan(uint8_t scan_mode, uint16_t color) {
         (scan_mode == BT_SCAN_SIMPLE_TWO) ||
         (scan_mode == BT_SCAN_ANALYZER) ||
         (scan_mode == BT_SCAN_MESHTASTIC) ||
+        (scan_mode == BT_SCAN_MESHCORE) ||
         (scan_mode == BT_SCAN_RAYBAN))
       NimBLEDevice::setScanDuplicateCacheSize(0);
     else {
@@ -7182,6 +7210,7 @@ void WiFiScan::RunBluetoothScan(uint8_t scan_mode, uint16_t color) {
         (scan_mode == BT_SCAN_IBEACON) ||
         (scan_mode == BT_SCAN_FOX_HUNT) ||
         (scan_mode == BT_SCAN_MESHTASTIC) ||
+        (scan_mode == BT_SCAN_MESHCORE) ||
         (scan_mode == BT_SCAN_RAYBAN) ||
         (scan_mode == BT_SCAN_AIRTAG) ||
         (scan_mode == BT_SCAN_AIRTAG_MON) ||
@@ -7217,6 +7246,8 @@ void WiFiScan::RunBluetoothScan(uint8_t scan_mode, uint16_t color) {
             display_obj.tft.drawCentreString("Meta Detect",TFT_WIDTH / 2, 16, 2);
           else if (scan_mode == BT_SCAN_MESHTASTIC)
             display_obj.tft.drawCentreString("Meshtastic Detect", TFT_WIDTH / 2, 16, 2);
+          else if (scan_mode == BT_SCAN_MESHCORE)
+            display_obj.tft.drawCentreString("MeshCore Detect", TFT_WIDTH / 2, 16, 2);
           #ifdef HAS_ILI9341
             if (scan_mode != BT_SCAN_FLOCK)
               display_obj.touchToExit();
@@ -7241,6 +7272,7 @@ void WiFiScan::RunBluetoothScan(uint8_t scan_mode, uint16_t color) {
       }
       else if ((scan_mode == BT_SCAN_FLIPPER) ||
                 (scan_mode == BT_SCAN_MESHTASTIC) ||
+                (scan_mode == BT_SCAN_MESHCORE) ||
                 (scan_mode == BT_SCAN_RAYBAN) ||
                 (scan_mode == BT_SCAN_FLOCK) ||
                 (scan_mode == BT_SCAN_SIMPLE) ||
@@ -7252,6 +7284,11 @@ void WiFiScan::RunBluetoothScan(uint8_t scan_mode, uint16_t color) {
         if (scan_mode == BT_SCAN_MESHTASTIC) {
           this->clearList(CLEAR_MESH);
           this->startLog("meshtastic");
+          buffer_obj.append(this->header_line);
+        }
+        if (scan_mode == BT_SCAN_MESHCORE) {
+          this->clearList(CLEAR_MESHCORE);
+          this->startLog("meshcore");
           buffer_obj.append(this->header_line);
         }
         if ((scan_mode == BT_SCAN_AIRTAG) || (scan_mode == BT_SCAN_AIRTAG_MON))
@@ -7317,6 +7354,7 @@ void WiFiScan::RunBluetoothScan(uint8_t scan_mode, uint16_t color) {
     pBLEScan->setMaxResults(0);
     if ((scan_mode == BT_SCAN_RAYBAN) ||
         (scan_mode == BT_SCAN_MESHTASTIC) ||
+        (scan_mode == BT_SCAN_MESHCORE) ||
         (scan_mode == WIFI_SCAN_WAR_DRIVE) ||
         (scan_mode == BT_SCAN_ANALYZER) ||
         (scan_mode == BT_SCAN_FLOCK) ||
@@ -7488,6 +7526,150 @@ void WiFiScan::runMeshtasticDetector(uint32_t currentTime) {
                    (node.hint.length() ? node.hint : String("----")) + " " +
                    (node.name.length() ? node.name : String("(unknown)")),
                    node.confirmed ? TFT_GREEN : TFT_YELLOW);
+          printRow("  " + node.mac, TFT_CYAN);
+        }
+        else {
+          printRow("", TFT_BLACK);
+          printRow("", TFT_BLACK);
+        }
+      }
+    #endif
+  #endif
+}
+
+// MeshCore companion radios advertise "MeshCore-<id>" as their BLE name, usually
+// in the scan response, so an active scan is required. The id after the prefix
+// is not fixed (8 hex pubkey chars, 12 hex MAC chars or a user-chosen name), so
+// only the prefix is checked. The Nordic UART Service UUID just corroborates.
+void WiFiScan::updateMeshcoreNode(const String& mac_in, const String& name, int rssi, bool service_match) {
+  if (!name.startsWith("MeshCore-"))
+    return;
+
+  String mac = mac_in;
+  mac.toUpperCase();
+
+  // Wardrive can sit below the heap guard's free-memory threshold, so count
+  // unique MACs in a fixed array instead of the heap-guarded list.
+  if (this->currentScanMode == WIFI_SCAN_WAR_DRIVE) {
+    if (mac.length() < 17)
+      return;
+    uint8_t mac_bytes[6];
+    for (int i = 0; i < 6; i++)
+      mac_bytes[i] = (uint8_t)strtol(mac.c_str() + (i * 3), NULL, 16);
+    for (uint16_t i = 0; i < this->meshcore_wardrive_count; i++) {
+      if (memcmp(this->meshcore_wardrive_macs[i], mac_bytes, 6) == 0)
+        return;
+    }
+    if (this->meshcore_wardrive_count >= MESHCORE_WARDRIVE_MAX)
+      return;
+    memcpy(this->meshcore_wardrive_macs[this->meshcore_wardrive_count], mac_bytes, 6);
+    this->meshcore_wardrive_count++;
+    Serial.println((String)rssi + " " + mac + (service_match ? " MeshCore " : " MeshCore? ") + name +
+                   " [wardrive MC:" + (String)this->meshcore_wardrive_count + "]");
+    return;
+  }
+
+  for (int i = 0; i < meshcore_nodes->size(); i++) {
+    if (mac == meshcore_nodes->get(i).mac) {
+      MeshcoreNode node = meshcore_nodes->get(i);
+      node.rssi = rssi;
+      node.last_seen = millis();
+      node.name = name;
+      if (service_match)
+        node.confirmed = true;
+      meshcore_nodes->set(i, node);
+      return;
+    }
+  }
+
+  MeshcoreNode node;
+  node.mac = mac;
+  node.name = name;
+  node.rssi = rssi;
+  node.last_seen = millis();
+  node.confirmed = service_match;
+
+  if (!marauder::memoryGuardedAdd(meshcore_nodes, node)) {
+    Serial.println(F("MeshCore node dropped: low memory"));
+    return;
+  }
+
+  Serial.println((String)rssi + " " + mac + (service_match ? " MeshCore " : " MeshCore? ") + name);
+
+  String log_name = name;
+  log_name.replace(",", " ");
+  String log_line = mac + "," + log_name + ",[BLE],";
+  #ifdef HAS_GPS
+    if (gps_obj.getGpsModuleStatus() && gps_obj.getFixStatus())
+      log_line += gps_obj.getDatetime() + ",0," + (String)rssi + "," + gps_obj.getLat() + "," + gps_obj.getLon() + "," + gps_obj.getAlt() + "," + gps_obj.getAccuracy();
+    else
+  #endif
+      log_line += ",0," + (String)rssi + ",0,0,0,0";
+  log_line += ",BLE\n";
+  buffer_obj.append(log_line);
+}
+
+void WiFiScan::runMeshcoreDetector(uint32_t currentTime) {
+  #ifdef HAS_BT
+    #ifdef HAS_SCREEN
+      if (currentTime - this->last_ui_update < 500)
+        return;
+      this->last_ui_update = millis();
+
+      const int16_t list_y = (STATUS_BAR_WIDTH * 2) + 1 + EXT_BUTTON_WIDTH;
+      const uint8_t line_height = 8;
+      const uint8_t cols = TFT_WIDTH / CHAR_WIDTH;
+      const int max_nodes = ((TFT_HEIGHT - list_y) / line_height - 1) / 2;
+      if (max_nodes < 1)
+        return;
+
+      // Hold callbacks off the list while it is sorted and copied.
+      this->bt_pending_clear = true;
+      const uint32_t callback_wait_started = millis();
+      while (bt_cb_busy && millis() - callback_wait_started < 500)
+        delay(1);
+      bt_cb_busy = false;
+
+      const int total = meshcore_nodes->size();
+      int confirmed = 0;
+      std::vector<std::pair<int, int>> order; // {-rssi, list index}
+      order.reserve(total);
+      for (int i = 0; i < total; i++) {
+        order.push_back({-(int)meshcore_nodes->get(i).rssi, i});
+        if (meshcore_nodes->get(i).confirmed)
+          confirmed++;
+      }
+      std::sort(order.begin(), order.end());
+
+      const int shown = (total < max_nodes) ? total : max_nodes;
+      std::vector<MeshcoreNode> rows;
+      rows.reserve(shown);
+      for (int i = 0; i < shown; i++)
+        rows.push_back(meshcore_nodes->get(order[i].second));
+
+      this->bt_pending_clear = false;
+
+      auto printRow = [&](String text, uint16_t color) {
+        if (text.length() > cols)
+          text = text.substring(0, cols);
+        while (text.length() < cols)
+          text.concat(" ");
+        display_obj.tft.setTextColor(color, TFT_BLACK);
+        display_obj.tft.println(text);
+      };
+
+      display_obj.tft.setFreeFont(NULL);
+      display_obj.tft.setTextWrap(false);
+      display_obj.tft.setTextSize(1);
+      display_obj.tft.setCursor(0, list_y);
+
+      printRow("Nodes:" + (String)total + " *:" + (String)confirmed + " ?:" + (String)(total - confirmed), TFT_WHITE);
+
+      for (int i = 0; i < max_nodes; i++) {
+        if (i < shown) {
+          const MeshcoreNode& node = rows[i];
+          printRow((String)node.rssi + (node.confirmed ? " * " : " ? ") + node.name,
+                   node.confirmed ? TFT_RED : TFT_YELLOW);
           printRow("  " + node.mac, TFT_CYAN);
         }
         else {
@@ -12722,6 +12904,9 @@ void WiFiScan::main(uint32_t currentTime)
   }
   else if (currentScanMode == BT_SCAN_MESHTASTIC) {
     this->runMeshtasticDetector(currentTime);
+  }
+  else if (currentScanMode == BT_SCAN_MESHCORE) {
+    this->runMeshcoreDetector(currentTime);
   }
   else if (currentScanMode == WIFI_SCAN_DETECT_FOLLOW) {
     if (currentTime - initTime >= this->channel_hop_delay * HOP_DELAY) {
