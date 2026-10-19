@@ -3662,10 +3662,10 @@ void MenuFunctions::RunSetup()
     this->drawStatusBar();
     wifi_scan_obj.StartScan(BT_SCAN_MESHTASTIC, TFT_GREEN);
   });
-  this->addNodes(&bluetoothSnifferMenu, "MeshCore Detect", TFTRED, BLUETOOTH_SNIFF, [this]() {
+  this->addNodes(&bluetoothSnifferMenu, "MeshCore Detect", TFTORANGE, BLUETOOTH_SNIFF, [this]() {
     display_obj.clearScreen();
     this->drawStatusBar();
-    wifi_scan_obj.StartScan(BT_SCAN_MESHCORE, TFT_RED);
+    wifi_scan_obj.StartScan(BT_SCAN_MESHCORE, TFT_ORANGE);
   });
   this->addNodes(&bluetoothSnifferMenu, "Fox Hunt", TFTCYAN, SCANNERS, [this]() {
     this->buildBluetoothFoxHuntMenu();

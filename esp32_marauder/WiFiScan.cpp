@@ -7669,7 +7669,7 @@ void WiFiScan::runMeshcoreDetector(uint32_t currentTime) {
         if (i < shown) {
           const MeshcoreNode& node = rows[i];
           printRow((String)node.rssi + (node.confirmed ? " * " : " ? ") + node.name,
-                   node.confirmed ? TFT_RED : TFT_YELLOW);
+                   node.confirmed ? TFT_ORANGE : TFT_YELLOW);
           printRow("  " + node.mac, TFT_CYAN);
         }
         else {

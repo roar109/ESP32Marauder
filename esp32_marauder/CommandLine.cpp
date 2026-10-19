@@ -1362,7 +1362,7 @@ void CommandLine::runCommand(String input) {
             this->startScanFromCLI(BT_SCAN_MESHTASTIC, TFT_GREEN, "Meshtastic detect");
           }
           else if (bt_type == "meshcore") {
-            this->startScanFromCLI(BT_SCAN_MESHCORE, TFT_RED, "MeshCore detect");
+            this->startScanFromCLI(BT_SCAN_MESHCORE, TFT_ORANGE, "MeshCore detect");
           }
         }
         // General bluetooth sniff
