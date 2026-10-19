@@ -683,6 +683,9 @@ extern "C" {
                 if (buf >= 0)
                 {      
 
+                  wifi_scan_obj.updateMeshtasticNode(mac, name, rssi,
+                      advertisedDevice->isAdvertisingService(MESHTASTIC_SERVICE_UUID));
+
                   if (wifi_scan_obj.seen_mac(mac_char)) {
                     wifi_scan_obj.bt_cb_busy = false;
                     return;
@@ -1475,6 +1478,9 @@ extern "C" {
                 bool do_save = false;
                 if (buf >= 0)
                 {                
+
+                  wifi_scan_obj.updateMeshtasticNode(mac, name, rssi,
+                      advertisedDevice->isAdvertisingService(MESHTASTIC_SERVICE_UUID));
 
                   if (wifi_scan_obj.seen_mac(mac_char)) {
                     wifi_scan_obj.bt_cb_busy = false;
@@ -2797,6 +2803,7 @@ void WiFiScan::StartScan(uint8_t scan_mode, uint16_t color) {
     this->geofence_paused = false;
     this->active_geofence_name = "";
     #ifdef HAS_BT
+      this->clearList(CLEAR_MESH);
       RunBluetoothScan(scan_mode, color);
     #endif
     RunBeaconScan(scan_mode, color);
@@ -6740,7 +6747,9 @@ void WiFiScan::displayWardriveStats() {
         display_obj.tft.println("BT: " + (String)this->bt_frames);
         display_obj.tft.setTextSize(2);
         display_obj.tft.setTextColor(TFT_RED, TFT_BLACK);
-        display_obj.tft.println("Flock: " + (String)this->flock_devices + "\n");
+        display_obj.tft.println("Flock: " + (String)this->flock_devices);
+        display_obj.tft.setTextColor(TFT_YELLOW, TFT_BLACK);
+        display_obj.tft.println("Mesh: " + (String)meshtastic_nodes->size() + "\n");
       #else
         display_obj.tft.setTextSize(2);
         display_obj.tft.setTextColor(TFT_GREEN, TFT_BLACK);
@@ -6749,7 +6758,9 @@ void WiFiScan::displayWardriveStats() {
         display_obj.tft.println("BT:" + (String)this->bt_frames);
         display_obj.tft.setTextSize(1);
         display_obj.tft.setTextColor(TFT_RED, TFT_BLACK);
-        display_obj.tft.println("Flock: " + (String)this->flock_devices + "\n");
+        display_obj.tft.print("Flock:" + (String)this->flock_devices + " ");
+        display_obj.tft.setTextColor(TFT_YELLOW, TFT_BLACK);
+        display_obj.tft.println("Mesh:" + (String)meshtastic_nodes->size() + "\n");
       #endif
       
 
@@ -7376,6 +7387,11 @@ void WiFiScan::updateMeshtasticNode(const String& mac_in, const String& name, in
     return;
 
   Serial.println((String)rssi + " " + mac + (service_match ? " Meshtastic " : " Meshtastic? ") + name);
+
+  // Wardrive already logs every new BLE MAC itself; only the dedicated
+  // detector writes its own log lines.
+  if (this->currentScanMode != BT_SCAN_MESHTASTIC)
+    return;
 
   String log_name = name;
   log_name.replace(",", " ");
