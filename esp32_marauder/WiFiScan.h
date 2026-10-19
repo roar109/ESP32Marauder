@@ -1026,7 +1026,9 @@ class WiFiScan
     uint8_t meshtastic_wardrive_macs[MESHTASTIC_WARDRIVE_MAX][6];
     uint16_t meshtastic_wardrive_count = 0;
     static const uint16_t MESHCORE_WARDRIVE_MAX = 256;
-    uint8_t meshcore_wardrive_macs[MESHCORE_WARDRIVE_MAX][6];
+    // Fixed MAC array kept in RTC memory (defined in WiFiScan.cpp) so it does not
+    // take 1.5 KB of the scarce DRAM heap that wardrive's WiFi+BLE needs.
+    static uint8_t meshcore_wardrive_macs[MESHCORE_WARDRIVE_MAX][6];
     uint16_t meshcore_wardrive_count = 0;
     int8_t min_rssi = 0;
     int8_t max_rssi = -128;

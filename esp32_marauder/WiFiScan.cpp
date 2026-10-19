@@ -38,6 +38,7 @@ LinkedList<AccessPoint>* access_points;
 LinkedList<Station>* stations;
 LinkedList<AirTag>* airtags;
 LinkedList<Flipper>* flippers;
+uint8_t WiFiScan::meshcore_wardrive_macs[WiFiScan::MESHCORE_WARDRIVE_MAX][6] RTC_NOINIT_ATTR;
 LinkedList<MeshtasticNode>* meshtastic_nodes;
 LinkedList<MeshcoreNode>* meshcore_nodes;
 LinkedList<IPAddress>* ipList;
@@ -7542,7 +7543,7 @@ void WiFiScan::runMeshtasticDetector(uint32_t currentTime) {
 // is not fixed (8 hex pubkey chars, 12 hex MAC chars or a user-chosen name), so
 // only the prefix is checked. The Nordic UART Service UUID just corroborates.
 void WiFiScan::updateMeshcoreNode(const String& mac_in, const String& name, int rssi, bool service_match) {
-  if (!name.startsWith("MeshCore-"))
+  if (strncmp(name.c_str(), "MeshCore-", 9) != 0)
     return;
 
   String mac = mac_in;
