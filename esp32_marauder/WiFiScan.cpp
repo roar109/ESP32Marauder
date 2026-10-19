@@ -6748,8 +6748,8 @@ void WiFiScan::displayWardriveStats() {
         display_obj.tft.setTextSize(2);
         display_obj.tft.setTextColor(TFT_RED, TFT_BLACK);
         display_obj.tft.println("Flock: " + (String)this->flock_devices);
-        display_obj.tft.setTextColor(TFT_YELLOW, TFT_BLACK);
-        display_obj.tft.println("Mesh: " + (String)meshtastic_nodes->size() + "\n");
+        display_obj.tft.setTextColor(TFT_GREEN, TFT_BLACK);
+        display_obj.tft.println("MT: " + (String)meshtastic_nodes->size() + "\n");
       #else
         display_obj.tft.setTextSize(2);
         display_obj.tft.setTextColor(TFT_GREEN, TFT_BLACK);
@@ -6759,8 +6759,8 @@ void WiFiScan::displayWardriveStats() {
         display_obj.tft.setTextSize(1);
         display_obj.tft.setTextColor(TFT_RED, TFT_BLACK);
         display_obj.tft.print("Flock:" + (String)this->flock_devices + " ");
-        display_obj.tft.setTextColor(TFT_YELLOW, TFT_BLACK);
-        display_obj.tft.println("Mesh:" + (String)meshtastic_nodes->size() + "\n");
+        display_obj.tft.setTextColor(TFT_GREEN, TFT_BLACK);
+        display_obj.tft.println("MT:" + (String)meshtastic_nodes->size() + "\n");
       #endif
       
 
