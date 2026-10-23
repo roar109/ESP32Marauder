@@ -47,7 +47,8 @@ class Buffer {
 
     bool writing = false; // acceppting writes to buffer
     bool useA = true; // writing to bufA or bufB
-    bool saving = false; // currently saving onto the SD card
+    volatile bool saving = false; // currently saving onto the SD card
+    portMUX_TYPE bufMux = portMUX_INITIALIZER_UNLOCKED;
 
     String fileName = "/0.pcap";
     const char* directory = NULL;

@@ -183,6 +183,7 @@
 #define REMOTE_ID_SCAN_ALL 87
 #define REMOTE_ID_SCAN_TARGET 88
 #define BT_SCAN_MESHTASTIC 89
+#define BT_SCAN_MESHCORE 90
 
 #define WIFI_ATTACK_FUNNY_BEACON 99 
 
@@ -236,6 +237,7 @@
 #define CLEAR_SSID  7
 #define CLEAR_BLE   8
 #define CLEAR_MESH  9
+#define CLEAR_MESHCORE 10
 
 #define WIGLE_UPLOAD 0
 #define WDG_UPLOAD   1
@@ -302,6 +304,12 @@ static const NimBLEUUID DULT_SERVICE_UUID(
 
 static const NimBLEUUID MESHTASTIC_SERVICE_UUID(
     "6ba1b218-15a8-461f-9fa8-5dcae273eafd"
+);
+
+// Nordic UART Service, advertised by MeshCore companion radios. Many unrelated
+// devices advertise it too, so it only corroborates the "MeshCore-" name match.
+static const NimBLEUUID MESHCORE_NUS_SERVICE_UUID(
+    "6e400001-b5a3-f393-e0a9-e50e24dcca9e"
 );
 
 static const NimBLEUUID DULT_SOUND_CHARACTERISTIC_UUID(
@@ -376,6 +384,14 @@ struct MeshtasticNode {
   String mac;
   String name;
   String hint;
+  int8_t rssi = -128;
+  uint32_t last_seen = 0;
+  bool confirmed = false;
+};
+
+struct MeshcoreNode {
+  String mac;
+  String name;
   int8_t rssi = -128;
   uint32_t last_seen = 0;
   bool confirmed = false;
@@ -512,6 +528,9 @@ class WiFiScan
     bool scan_complete = false;
 
     uint8_t wardrive_channel_index = 0;
+    bool wardrive_ble_logged = false;
+    static const uint32_t WARDRIVE_TELEMETRY_MS = 30000;
+    uint32_t last_wardrive_telemetry = 0;
     GeofenceConfig geofences[MAX_GEOFENCES];
     bool geofence_paused = false;
     uint32_t last_geofence_check = 0;
@@ -886,6 +905,7 @@ class WiFiScan
     void RunPacketMonitor(uint8_t scan_mode, uint16_t color);
     void RunBluetoothScan(uint8_t scan_mode, uint16_t color);
     void runMeshtasticDetector(uint32_t currentTime);
+    void runMeshcoreDetector(uint32_t currentTime);
     void RunSourApple(uint8_t scan_mode, uint16_t color);
     void RunFindMyLive(uint8_t scan_mode, uint16_t color);
     void RunSwiftpairSpam(uint8_t scan_mode, uint16_t color);
@@ -1008,6 +1028,11 @@ class WiFiScan
     static const uint16_t MESHTASTIC_WARDRIVE_MAX = 256;
     uint8_t meshtastic_wardrive_macs[MESHTASTIC_WARDRIVE_MAX][6];
     uint16_t meshtastic_wardrive_count = 0;
+    static const uint16_t MESHCORE_WARDRIVE_MAX = 256;
+    // Fixed MAC array kept in RTC memory (defined in WiFiScan.cpp) so it does not
+    // take 1.5 KB of the scarce DRAM heap that wardrive's WiFi+BLE needs.
+    static uint8_t meshcore_wardrive_macs[MESHCORE_WARDRIVE_MAX][6];
+    uint16_t meshcore_wardrive_count = 0;
     int8_t min_rssi = 0;
     int8_t max_rssi = -128;
 
@@ -1134,6 +1159,7 @@ class WiFiScan
     bool isFlockCamera(const uint8_t* payload, size_t len, const String& name, String* serial_out);
     int seenBLEDevice(BleDevice ble_device);
     void updateMeshtasticNode(const String& mac, const String& name, int rssi, bool service_match);
+    void updateMeshcoreNode(const String& mac, const String& name, int rssi, bool service_match);
     bool retainBLEDevice(const BleDevice& ble_device);
     bool shouldRenderIBeaconEvent(uint32_t current_time);
     uint16_t rssiToColor(int8_t rssi);
@@ -1188,6 +1214,8 @@ class WiFiScan
     int generateSSIDs(int count = 20);
     bool shutdownWiFi();
     bool shutdownBLE();
+    void logWardriveHeap(const char* tag, const char* phase);
+    void logWardriveTelemetry(uint32_t now);
     bool scanning();
     bool joinWiFi(String ssid, String password, bool gui = true, bool save_credential = true);
     bool joinSavedWiFi(bool gui = true);
