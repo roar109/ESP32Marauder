@@ -162,14 +162,24 @@ void Buffer::write(uint16_t n){
 
 void Buffer::write(const uint8_t* buf, uint32_t len){
   if(!writing) return;
-  while(saving) delay(10);
-  
-  if(useA){
-    memcpy(&bufA[bufSizeA], buf, len);
-    bufSizeA += len;
-  }else{
-    memcpy(&bufB[bufSizeB], buf, len);
-    bufSizeB += len;
+
+  // Writers run on several tasks at once (loop, NimBLE host, WiFi), so the
+  // bounds check, copy and size update must be one atomic step. Without it two
+  // writers can both pass the free-space check and overflow the buffer.
+  while (true) {
+    portENTER_CRITICAL(&bufMux);
+    if (!saving) {
+      uint8_t* dst = useA ? bufA : bufB;
+      uint32_t& used = useA ? bufSizeA : bufSizeB;
+      if (used + len <= BUF_SIZE) {
+        memcpy(&dst[used], buf, len);
+        used += len;
+      }
+      portEXIT_CRITICAL(&bufMux);
+      return;
+    }
+    portEXIT_CRITICAL(&bufMux);
+    delay(10);
   }
 }
 
@@ -241,7 +251,9 @@ void Buffer::saveSerial() {
 }
 
 void Buffer::save() {
+  portENTER_CRITICAL(&bufMux);
   saving = true;
+  portEXIT_CRITICAL(&bufMux);
 
   if((bufSizeA + bufSizeB) == 0){
     saving = false;

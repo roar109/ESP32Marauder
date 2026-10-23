@@ -24,6 +24,7 @@ https://www.online-utility.org/image/convert/to/XBM
   #include "SDInterface.h"
 #endif
 #include "Buffer.h"
+#include "ResetDiag.h"
 
 #ifdef HAS_FLIPPER_LED
   #include "flipperLED.h"
@@ -252,6 +253,8 @@ void setup()
   while(!Serial)
     delay(10);
 
+  resetDiagBegin();
+
   #ifdef HAS_C5_SD
     sharedSPI.begin(SD_SCK, SD_MISO, SD_MOSI);
     delay(100);
@@ -338,6 +341,20 @@ void setup()
     #endif
   #endif
 
+  #if defined(HAS_SCREEN) && !defined(MARAUDER_POOM)
+    // Show an abnormal reset (panic, watchdog, brownout) for a moment so it can
+    // be read without a serial monitor attached.
+    if (resetDiagAbnormal() && !display_obj.headless_mode) {
+      display_obj.tft.setFreeFont(NULL);
+      display_obj.tft.setTextSize(1);
+      display_obj.tft.setTextWrap(false);
+      display_obj.tft.setTextColor(TFT_RED, TFT_BLACK);
+      display_obj.tft.setCursor(0, display_obj.tft.height() - 10);
+      display_obj.tft.print(String("Last reset: ") + resetDiagReason());
+      delay(2500);
+    }
+  #endif
+
   settings_obj.begin();
 
   const char* type = settings_obj.getSettingType("wu");
@@ -347,8 +364,6 @@ void setup()
     settings_obj.createDefaultSettings(SPIFFS);
   }
 
-  buffer_obj = Buffer();
-
   #ifndef HAS_SIMPLEX_DISPLAY
     #if defined(HAS_SD)
       // Do some SD stuff
@@ -357,6 +372,8 @@ void setup()
 
     #endif
   #endif
+
+  resetDiagLogToSd();
 
   wifi_scan_obj.RunSetup();
 
@@ -447,6 +464,7 @@ void loop()
   cli_obj.main(currentTime);
   wifi_scan_obj.main(currentTime);
   recon_obj.main(currentTime);
+  resetDiagTick(currentTime, wifi_scan_obj.currentScanMode);
 
   #ifdef HAS_T_DONGLE_DISPLAY
     t_dongle_display.update(currentTime, wifi_scan_obj);

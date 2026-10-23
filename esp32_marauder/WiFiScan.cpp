@@ -2822,6 +2822,7 @@ void WiFiScan::StartScan(uint8_t scan_mode, uint16_t color) {
   else if (scan_mode == WIFI_SCAN_WAR_DRIVE) {
     this->logWardriveHeap("WARDRIVE START", "begin");
     this->wardrive_ble_logged = false;
+    this->last_wardrive_telemetry = millis();
     this->wardrive_channel_index = 0;
     this->ble_scanning = false;
     this->reloadGeofences();
@@ -3188,6 +3189,48 @@ void WiFiScan::logWardriveHeap(const char* tag, const char* phase) {
                 (unsigned)ESP.getFreeHeap(),
                 (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_8BIT),
                 (unsigned)ESP.getMinFreeHeap());
+}
+
+// Slow-leak telemetry for wardrive: one line every WARDRIVE_TELEMETRY_MS to
+// serial and, when an SD card is present, to /wardrive_telemetry.txt. It is kept
+// out of the wardrive CSV so WiGLE uploads are unaffected.
+void WiFiScan::logWardriveTelemetry(uint32_t now) {
+  if (now - this->last_wardrive_telemetry < WARDRIVE_TELEMETRY_MS)
+    return;
+  this->last_wardrive_telemetry = now;
+
+  TaskHandle_t nimble_task = xTaskGetHandle("nimble_host");
+  TaskHandle_t wifi_task = xTaskGetHandle("wifi");
+
+  String line = "[WARDRIVE HEAP] up=" + String(now / 1000) + "s" +
+      " free=" + String((unsigned)ESP.getFreeHeap()) +
+      " largest=" + String((unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_8BIT)) +
+      " min=" + String((unsigned)ESP.getMinFreeHeap()) +
+      " stackFree(loop=" + String((unsigned)uxTaskGetStackHighWaterMark(NULL)) +
+      ",nimble=" + String(nimble_task ? (unsigned)uxTaskGetStackHighWaterMark(nimble_task) : 0u) +
+      ",wifi=" + String(wifi_task ? (unsigned)uxTaskGetStackHighWaterMark(wifi_task) : 0u) + ")" +
+      " wifi=" + String(this->beacon_frames) +
+      " bt=" + String(this->bt_frames) +
+      " flock=" + String(this->flock_devices) +
+      " mt=" + String(this->meshtastic_wardrive_count) +
+      " mc=" + String(this->meshcore_wardrive_count) +
+      " macHist=" + String(this->mac_history_cursor) +
+      " lists(aps=" + String(access_points->size()) +
+      ",stas=" + String(stations->size()) +
+      ",ble=" + String(ble_devices->size()) +
+      ",mtNodes=" + String(meshtastic_nodes->size()) +
+      ",mcNodes=" + String(meshcore_nodes->size()) + ")";
+  Serial.println(line);
+
+  #ifdef HAS_SD
+    if (sd_obj.supported) {
+      File telemetry_file = SD.open("/wardrive_telemetry.txt", FILE_APPEND);
+      if (telemetry_file) {
+        telemetry_file.println(line);
+        telemetry_file.close();
+      }
+    }
+  #endif
 }
 
 // Function to stop all wifi scans
@@ -3748,16 +3791,21 @@ uint8_t WiFiScan::build_top10_for_ui(MacEntry* out_top10, MacSortMode mode) {
 
 void WiFiScan::save_mac(unsigned char* mac) {
   //Save a MAC address into the recently seen array.
-  if (this->mac_history_cursor >= mac_history_len) {
-    this->mac_history_cursor = 0;
-  }
   struct mac_addr tmp;
   for (int x = 0; x < 6 ; x++) {
     tmp.bytes[x] = mac[x];
   }
 
+  // Called from the loop, BLE host and WiFi tasks. The cursor check and the
+  // write must be atomic or two callers can write one slot past the array.
+  static portMUX_TYPE mac_history_mux = portMUX_INITIALIZER_UNLOCKED;
+  portENTER_CRITICAL(&mac_history_mux);
+  if (this->mac_history_cursor >= mac_history_len) {
+    this->mac_history_cursor = 0;
+  }
   mac_history[this->mac_history_cursor] = tmp;
   this->mac_history_cursor++;
+  portEXIT_CRITICAL(&mac_history_mux);
 }
 
 String WiFiScan::security_int_to_string(int security_type) {
@@ -13270,6 +13318,7 @@ void WiFiScan::main(uint32_t currentTime)
       this->last_ui_update = millis();
       this->displayWardriveStats();
     }
+    this->logWardriveTelemetry(currentTime);
   }
   else if (currentScanMode == WIFI_SCAN_GPS_DATA) {
     if (currentTime - initTime >= 5000) {

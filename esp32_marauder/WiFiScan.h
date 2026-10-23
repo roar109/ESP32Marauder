@@ -529,6 +529,8 @@ class WiFiScan
 
     uint8_t wardrive_channel_index = 0;
     bool wardrive_ble_logged = false;
+    static const uint32_t WARDRIVE_TELEMETRY_MS = 30000;
+    uint32_t last_wardrive_telemetry = 0;
     GeofenceConfig geofences[MAX_GEOFENCES];
     bool geofence_paused = false;
     uint32_t last_geofence_check = 0;
@@ -1213,6 +1215,7 @@ class WiFiScan
     bool shutdownWiFi();
     bool shutdownBLE();
     void logWardriveHeap(const char* tag, const char* phase);
+    void logWardriveTelemetry(uint32_t now);
     bool scanning();
     bool joinWiFi(String ssid, String password, bool gui = true, bool save_credential = true);
     bool joinSavedWiFi(bool gui = true);
